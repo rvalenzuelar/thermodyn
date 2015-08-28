@@ -13,3 +13,9 @@ Thermodynamic functions including:
 * equivalent potential temperature (Bolton 1980)
 * Brunt-Vaisala frequency unsaturated (Bohren and Albrecht 1998)
 * Brunt-Vaisala frequency saturated (Durran and Klemp 1982)
+
+
+Need installed:
+
+* numpy 
+* pandas
