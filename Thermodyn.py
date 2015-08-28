@@ -89,7 +89,7 @@ def sat_vapor_press_lowe(**kwargs):
 				6.136820929E-11]
 		return polyval(meteo.K,coef)
 	else:
-		print "Error: check input arguments\n"
+		print "\nError in sat_vapor_press_lowe: check input arguments\n"
 
 def sat_vapor_press_cc(**kwargs):
 	"""  sat_wv_press = f(C[K]) [mb]
@@ -106,7 +106,7 @@ def sat_vapor_press_cc(**kwargs):
 	elif check_K:
 		return es0*np.exp(19.84-5417/meteo.K)
 	else:
-		print "Error: check input arguments\n"
+		print "\nError in sat_vapor_press_cc: check input arguments\n"
 
 def sat_mix_ratio(**kwargs):
 	"""  sat_mix_ratio = f(C,hPa {mb}) [kg/kg]
@@ -121,7 +121,7 @@ def sat_mix_ratio(**kwargs):
 		p=meteo.pressure 
 		return (0.622*es)/(p - es ) # [kg/kg]
 	else:
-		print "Error: check input arguments\n"
+		print "Error in sat_mix_ratio: check input arguments\n"
 
 def relative_humidity(**kwargs):
 	""" 	relative_humidity = f(C,Dewp) [%]
@@ -129,13 +129,19 @@ def relative_humidity(**kwargs):
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
+	check_K=hasattr(meteo,'K')	
 	check_Dewp=hasattr(meteo,'Dewp')		
-	if check_C and check_relh:
+	if check_C and check_Dewp:
 		relh = np.asarray(100-5*(meteo.C- meteo.Dewp)) #[%]
 		relh[relh>100.0] = 100.0
 		return relh	
+	elif check_K and check_Dewp:
+		Tc=meteo.K-273.15
+		relh = np.asarray(100-5*(Tc- meteo.Dewp)) #[%]
+		relh[relh>100.0] = 100.0
+		return relh	
 	else:
-		print "\nError: check input arguments\n"
+		print "\nError in relative_humidity: check input arguments\n"
 
 def dew_point(**kwargs):
 	""" 	Dewp = f(C,relative_humidity) [C]
@@ -150,7 +156,7 @@ def dew_point(**kwargs):
 		dewp = meteo.C - np.asarray((100. - relh)/5.) #[%]
 		return dewp
 	else:
-		print "\nError: check input arguments\n"		
+		print "\nError in dew_point: check input arguments\n"		
 
 def virtual_temperature(**kwargs):
 	""" Compute virtual temperature
@@ -170,7 +176,7 @@ def virtual_temperature(**kwargs):
 	elif check_theta and check_mixingr:
 		return meteo.theta*(1+0.61*meteo.mixing_ratio)
 	else:
-		print "\nError: check input arguments\n"
+		print "\nError in virtual_temperature: check input arguments\n"
 
 
 def lcl_temperature(**kwargs):
@@ -187,6 +193,9 @@ def lcl_temperature(**kwargs):
 		a = 1/(Tk-55)
 		b = np.log(relh/100.0)/2840.
 		return (1/(a-b))+55
+	else:
+		print "\nError in lcl_temperature: check input arguments\n"
+		
 
 def theta1(**kwargs):
 	""" Compute potential temperature
