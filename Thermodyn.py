@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from numpy.polynomial.polynomial import polyval
 import bisect
+import sys
 
 class meteo(object):
 	def __init__(self,**kwargs):
@@ -134,7 +135,7 @@ def relative_humidity(**kwargs):
 		relh[relh>100.0] = 100.0
 		return relh	
 	else:
-		print "Error: check input arguments\n"
+		print "\nError: check input arguments\n"
 
 def dew_point(**kwargs):
 	""" 	Dewp = f(C,relative_humidity) [C]
@@ -149,7 +150,7 @@ def dew_point(**kwargs):
 		dewp = meteo.C - np.asarray((100. - relh)/5.) #[%]
 		return dewp
 	else:
-		print "Error: check input arguments\n"		
+		print "\nError: check input arguments\n"		
 
 def virtual_temperature(**kwargs):
 	""" Compute virtual temperature
@@ -169,7 +170,8 @@ def virtual_temperature(**kwargs):
 	elif check_theta and check_mixingr:
 		return meteo.theta*(1+0.61*meteo.mixing_ratio)
 	else:
-		print "Error: check input arguments\n"
+		print "\nError: check input arguments\n"
+
 
 def lcl_temperature(**kwargs):
 	""" Lifting condensation level
@@ -204,11 +206,13 @@ def theta1(**kwargs):
 		quotient=np.divide(meteo.p0,meteo.pressure)		
 		return Tk*np.power(quotient,c) # [K]
 	else:
-		print "Error in theta1: check input arguments\n"
+		print "\nError in theta1: check input arguments\n"
+
 
 def theta2(**kwargs):
 	""" Compute potential temperature
 		theta = f(C {K}, hPa {mb}, mixing_ratio) [K]
+		mixing_ratio in [kg/kg]
 		Bolton, 1980, MWR	
 	"""
 	meteo=parse_args(**kwargs)	
@@ -219,7 +223,7 @@ def theta2(**kwargs):
 	if check_K and check_p and check_mixingr:
 		Tk=meteo.K
 		p=meteo.pressure
-		MR=meteo.mixing_ratio
+		MR=meteo.mixing_ratio 
 		quotient=np.divide(meteo.p0, p)
 		power=0.2584*(1-0.28*MR)
 		return Tk*np.power(quotient, power) # [K]
@@ -231,7 +235,7 @@ def theta2(**kwargs):
 		power=0.2584*(1-0.28*MR)
 		return Tk*np.power(quotient, power) # [K]
 	else:
-		print "Error in theta2: check input arguments\n"
+		print "\nError in theta2: check input arguments\n"
 
 def theta_equiv1(**kwargs):
 	""" Compute equivalent potential temperature
@@ -256,11 +260,12 @@ def theta_equiv1(**kwargs):
 		exp=np.exp( np.divide( meteo.Lv*satmixr, meteo.cp*Tk ) )
 		return th*exp
 	else:
-		print "Error in theta_equiv1: check input arguments\n"	
+		print "\nError in theta_equiv1: check input arguments\n"	
 
 def theta_equiv2(**kwargs):
 	""" Compute equivalent potential temperature
-		theta_equiv = f(C{K}, hPa{mb}) [K]
+		theta_equiv = f(C{K}, hPa{mb},mixing_ratio) [K]
+		mixing_ratio in [kg/kg]
 		Bolton, 1980, MWR (Eq43)
 	"""
 	meteo=parse_args(**kwargs)	
@@ -291,8 +296,8 @@ def theta_equiv2(**kwargs):
 		b=1E3*MR*(1+0.81*MR)
 		return th*np.exp(a*b)
 	else:
-		print "Error in theta_equiv2: check input arguments\n"	
-		
+		print "\nError in theta_equiv2: check input arguments\n"	
+
 def bv_freq_dry(**kwargs):
 	"""	Compute dry Brunt-Vaisala frequency (N^2)
 		Bohren and Albrecht (1998)		
@@ -304,47 +309,52 @@ def bv_freq_dry(**kwargs):
 	''' creates layer field'''
 	layer = make_layer(meteo.height,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
 	
-	''' creates dataframes '''	
-	d_theta = {'theta':meteo.theta,'layer':layer}
-	d_hgt = {'hgt':meteo.height,'layer':layer}
-	grp_theta=pd.DataFrame(d_theta).groupby('layer')
-	grp_hgt=pd.DataFrame(d_hgt).groupby('layer')
+	''' creates dataframe '''	
+	d = {'theta':meteo.theta,'layer':layer}
+	df=pd.DataFrame(d,index=meteo.height)
+
+	''' creates group '''
+	grp=df.groupby('layer')
 
 
-	''' mean value of the layer '''
-	theta_mean = grp_theta.mean()
+	# grp_theta=pd.DataFrame(d_theta).groupby('layer')
+	# grp_hgt=pd.DataFrame(d_hgt).groupby('layer')
+
+	''' mean value of layers '''
+	grp_mean = grp.mean()
+	theta_mean = grp_mean.theta
+
+	''' bottom values of layers '''
+	grp_bot = grp.first()
+	theta_bot = grp_bot.theta
+	z_bot = grp.apply(get_min_hgt)
+
+	''' top values of layers '''
+	grp_top = grp.last()
+	theta_top = grp_top.theta
+	z_top = grp.apply(get_max_hgt)
 
 	''' differentials '''
-	theta_first = grp_theta.first()
-	theta_last = grp_theta.last()
-	dTheta = theta_last - theta_first
-	z_first = grp_hgt.first()
-	z_last = grp_hgt.last()
-	dZ = z_last - z_first
+	dTheta = theta_top - theta_bot
+	dZ = z_top - z_bot
 
 	''' Brunt-Vaisala frequency '''
 	quotient = dTheta.values/dZ.values
 	bvf_raw = (meteo.g/theta_mean)*quotient
-	bvf_raw.columns=['bvf_dry']	
-	foo= bvf_raw.tail(1).values[0]
-
-	# print bvf_raw
-
-
 
 	''' get layer center '''
-	hgt = grp_hgt.apply(get_layer_center)
-	hgt.columns=['Height']
+	hgt = grp.apply(get_layer_center)
 	
 	''' if last value in row is nan then drop it'''
-	if np.isnan(foo[0]):
-		bvf=bvf_raw[:-1]
-		# bvf.index=hgt[:-1]
+	tail= bvf_raw.tail(1).values[0]
+	if np.isnan(tail):
+		d={'bvf_dry':bvf_raw[:-1].values}
+		bvf=pd.DataFrame(d,index=hgt[:-1].values)
+		bvf.index.name=['Height']
 	else:
-		bvf=bvf_raw
-		# bvf.index=hgt
-
-	# print bvf
+		d={'bvf_dry':bvf_raw.values}
+		bvf=pd.DataFrame(d,index=hgt.values)
+		bvf.index.name='Height'
 
 	return bvf
 
@@ -357,17 +367,19 @@ def bv_freq_moist(**kwargs):
 	check_K=hasattr(meteo,'K')
 	check_hgt=hasattr(meteo,'height')		
 	check_press=hasattr(meteo,'pressure')		
+	check_mixingr=hasattr(meteo,'mixing_ratio')
 
 	''' creates layer field '''
 	layer = make_layer(meteo.height,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
 
 	''' add fields  '''
 	sat_mixr = sat_mix_ratio(C=meteo.K-273.15,hPa=meteo.pressure)
-	th = theta(K=meteo.K,hPa=meteo.pressure)
+	th = theta2(K=meteo.K,hPa=meteo.pressure,mixing_ratio=meteo.mixing_ratio)
 
 	''' creates dataframe '''
 	if check_C:
-		d = {'temp':meteo.C,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
+		Tk=meteo.C+273.15
+		d = {'temp':Tk,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
 	elif check_K:
 		d = {'temp':meteo.K,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
 	df=pd.DataFrame(d,index=meteo.height)
@@ -381,54 +393,76 @@ def bv_freq_moist(**kwargs):
 	press_mean = grp_mean.press
 	satmixr_mean = grp_mean.sat_mixr
 
-	''' bot  values of layer '''
+	''' bottom values of layer '''
 	grp_bot = grp.first()
 	theta_bot = grp_bot.theta
+	lnTheta_bot=np.log(theta_bot)
 	sat_mixr_bot = grp_bot.sat_mixr
 	z_bot = grp.apply(get_min_hgt)
 
 	''' top values of layer '''	
 	grp_top = grp.last()
 	theta_top = grp_top.theta
+	lnTheta_top = np.log(theta_top)
 	sat_mixr_top = grp_top.sat_mixr
 	z_top = grp.apply(get_max_hgt)	
 
 	''' differentials '''
 	dZ = z_top - z_bot
-	dLogTheta = np.log(theta_top - theta_bot)
+	# dLogTheta = np.log(theta_top - theta_bot)
+	dlnTheta = lnTheta_top -lnTheta_bot
 	dQs = sat_mixr_top - sat_mixr_bot
-	dQw = dQs
+	dQ = dQs
+
+	# print dlnTheta
+	# sys.exit()
 
 	''' Brunt-Vaisala frequency '''
 	eps=meteo.Rd/meteo.Rm
 	Lv=meteo.Lv
 	cp=meteo.cp
 	Rd=meteo.Rd
+	g=meteo.g
 
-	F1 = 1+(Lv*satmixr_mean*np.power(Rd*temp_mean,-1))
-	F2 = 1+(eps*np.power(Lv,2)*satmixr_mean*np.power(cp*Rd*np.power(temp_mean,2),-1))
-	F3 = dLogTheta/dZ
-	F4 = Lv*np.power(cp*temp_mean,-1)*dQs/dZ
-	F5 = dQw/dZ
-	bvf = meteo.g*((F1/F2)*(F3+F4)-F5)
-	# print bvf
-	# exit()
+	# F1 = 1+(Lv*satmixr_mean*np.power(Rd*temp_mean,-1))
+	# F2 = 1+(eps*np.power(Lv,2)*satmixr_mean*np.power(cp*Rd*np.power(temp_mean,2),-1))
+	# F3 = dLogTheta/dZ
+	# F4 = Lv*np.power(cp*temp_mean,-1)*dQs/dZ
+	
+	F1 = 1+((Lv*satmixr_mean)/(Rd*temp_mean))
+	F2 = 1+(eps*np.power(Lv,2)*satmixr_mean)/(cp*Rd*np.power(temp_mean,2))
+	F3 = dlnTheta/dZ
+	F4 = (Lv/(cp*temp_mean))*dQ/dZ
+	F5 = dQ/dZ
+	bvf_raw = g*((F1/F2)*(F3+F4)-F5)
 
-	bvf_raw = (meteo.g/theta_mean)*quotient
-	bvf_raw.columns=['bvf_dry']	
-	foo= bvf_raw.tail(1).values[0]
+	# ''' get layer center '''
+	# hgt = grp_hgt.apply(get_layer_center)
+	# hgt.columns=['Height']
+	
+	# ''' if last value in row is nan then drop it'''
+	# if np.isnan(foo[0]):
+	# 	bvf=bvf_raw[:-1]
+	# 	bvf.index=hgt[:-1]
+	# else:
+	# 	bvf=bvf_raw
+	# 	bvf.index=hgt
+
+	# return bvf
 
 	''' get layer center '''
-	hgt = grp_hgt.apply(get_layer_center)
-	hgt.columns=['Height']
+	hgt = grp.apply(get_layer_center)
 	
 	''' if last value in row is nan then drop it'''
-	if np.isnan(foo[0]):
-		bvf=bvf_raw[:-1]
-		bvf.index=hgt[:-1]
+	tail= bvf_raw.tail(1).values[0]
+	if np.isnan(tail):
+		d={'bvf_moist':bvf_raw[:-1].values}
+		bvf=pd.DataFrame(d,index=hgt[:-1].values)
+		bvf.index.name=['Height']
 	else:
-		bvf=bvf_raw
-		bvf.index=hgt
+		d={'bvf_moist':bvf_raw.values}
+		bvf=pd.DataFrame(d,index=hgt.values)
+		bvf.index.name='Height'
 
 	return bvf
 
@@ -445,8 +479,8 @@ def get_max_hgt(x):
 	return max(x.index)
 
 def get_layer_center(x):
-	''' x is a pandas group instance '''
-	values = np.squeeze(x.values)
+	''' x is a pandas group '''
+	values = np.squeeze(x.index)
 	s = values.shape
 	if s:
 		target = int(x.name)
@@ -454,6 +488,12 @@ def get_layer_center(x):
 		return out
 	else:
 		return values
+	
+	# target = int(x.name)
+	# values = x.index
+
+	# print values
+
 
 def make_layer(height,**kwargs):
 	''' makes a new field layer 
