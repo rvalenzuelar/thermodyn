@@ -22,25 +22,16 @@ Need installed:
 
 Function arguments:
 
-K = temperature in Kelvin 
-
-C = temperature in deg Celsius
-
-theta =  potential temperature [K]
-
-Dewp = dew point temperature [C]
-
-relh = relative humidity [%]
-
-mixing_ratio = water vapor mixing ratio [kg/kg]
-
-mb = pressure in milibar
-
-hPa = pressure in hectopascal
-
-agl_m = altitude above ground level (i.e. sounding altitude)
-
-m = altitude above sea level (i.e. surface station)
+* K = temperature in Kelvin 
+* C = temperature in deg Celsius
+* theta =  potential temperature [K]
+* Dewp = dew point temperature [C]
+* relh = relative humidity [%]
+* mixing_ratio = water vapor mixing ratio [kg/kg]
+* mb = pressure in milibar
+* hPa = pressure in hectopascal
+* agl_m = altitude above ground level (i.e. sounding altitude)
+* m = altitude above sea level (i.e. surface station)
 
 
 Examples using ipython:
