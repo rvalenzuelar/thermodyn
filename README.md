@@ -1,4 +1,4 @@
-Thermodynamic functions including:
+Thermodynamic functions included:
 
 * saturation vapor pressure (Lowe 1980)
 * saturation vapor pressure (Bohren and Albrecht 1998)
