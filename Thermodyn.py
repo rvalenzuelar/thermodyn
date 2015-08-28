@@ -42,7 +42,7 @@ class meteo(object):
 				self.elevation = value # m station elevation
 
 		''' constants '''
-		self.cp = 1004.6	 # [J K-1 kg-1] specific heat at const press dry air
+		self.cp = 1004.6 # [J K-1 kg-1] specific heat at const press dry air
 		self.Lv = 2.25E6 # [J kg-1] latent heat of evaporation
 		self.Rd = 287.0 # [J K-1 kg-1] gas constant for dry air
 		self.Rm = 461.4 # [J K-1 kg-1] gas constant for moist air
@@ -316,10 +316,6 @@ def bv_freq_dry(**kwargs):
 	''' creates group '''
 	grp=df.groupby('layer')
 
-
-	# grp_theta=pd.DataFrame(d_theta).groupby('layer')
-	# grp_hgt=pd.DataFrame(d_hgt).groupby('layer')
-
 	''' mean value of layers '''
 	grp_mean = grp.mean()
 	theta_mean = grp_mean.theta
@@ -396,7 +392,7 @@ def bv_freq_moist(**kwargs):
 	''' bottom values of layer '''
 	grp_bot = grp.first()
 	theta_bot = grp_bot.theta
-	lnTheta_bot=np.log(theta_bot)
+	lnTheta_bot = np.log(theta_bot)
 	sat_mixr_bot = grp_bot.sat_mixr
 	z_bot = grp.apply(get_min_hgt)
 
@@ -409,13 +405,9 @@ def bv_freq_moist(**kwargs):
 
 	''' differentials '''
 	dZ = z_top - z_bot
-	# dLogTheta = np.log(theta_top - theta_bot)
-	dlnTheta = lnTheta_top -lnTheta_bot
+	dlnTheta = lnTheta_top - lnTheta_bot
 	dQs = sat_mixr_top - sat_mixr_bot
 	dQ = dQs
-
-	# print dlnTheta
-	# sys.exit()
 
 	''' Brunt-Vaisala frequency '''
 	eps=meteo.Rd/meteo.Rm
@@ -423,11 +415,6 @@ def bv_freq_moist(**kwargs):
 	cp=meteo.cp
 	Rd=meteo.Rd
 	g=meteo.g
-
-	# F1 = 1+(Lv*satmixr_mean*np.power(Rd*temp_mean,-1))
-	# F2 = 1+(eps*np.power(Lv,2)*satmixr_mean*np.power(cp*Rd*np.power(temp_mean,2),-1))
-	# F3 = dLogTheta/dZ
-	# F4 = Lv*np.power(cp*temp_mean,-1)*dQs/dZ
 	
 	F1 = 1+((Lv*satmixr_mean)/(Rd*temp_mean))
 	F2 = 1+(eps*np.power(Lv,2)*satmixr_mean)/(cp*Rd*np.power(temp_mean,2))
@@ -435,20 +422,6 @@ def bv_freq_moist(**kwargs):
 	F4 = (Lv/(cp*temp_mean))*dQ/dZ
 	F5 = dQ/dZ
 	bvf_raw = g*((F1/F2)*(F3+F4)-F5)
-
-	# ''' get layer center '''
-	# hgt = grp_hgt.apply(get_layer_center)
-	# hgt.columns=['Height']
-	
-	# ''' if last value in row is nan then drop it'''
-	# if np.isnan(foo[0]):
-	# 	bvf=bvf_raw[:-1]
-	# 	bvf.index=hgt[:-1]
-	# else:
-	# 	bvf=bvf_raw
-	# 	bvf.index=hgt
-
-	# return bvf
 
 	''' get layer center '''
 	hgt = grp.apply(get_layer_center)
@@ -488,12 +461,6 @@ def get_layer_center(x):
 		return out
 	else:
 		return values
-	
-	# target = int(x.name)
-	# values = x.index
-
-	# print values
-
 
 def make_layer(height,**kwargs):
 	''' makes a new field layer 
