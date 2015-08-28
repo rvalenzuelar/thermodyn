@@ -14,7 +14,8 @@ import bisect
 class meteo(object):
 	def __init__(self,**kwargs):
 		for key,value in kwargs.iteritems():
-			if isinstance(value,list) or isinstance(value,int):
+			''' convert input value to numpy array '''
+			if isinstance(value,list) or isinstance(value,int) or isinstance(value,float):
 				value=np.asarray(value)
 			if key == 'C':
 				self.C = value # [°C]
@@ -24,6 +25,8 @@ class meteo(object):
 				self.theta = value # [K]			
 			elif key == 'Dewp':
 				self.Dewp = value	# [°C]
+			elif key == 'relh':
+				self.relh = value	# [%]
 			elif key == 'mixing_ratio':
 				self.mixing_ratio = value # [kg/kg]
 			elif key == 'mb' or key == 'hPa':
@@ -57,7 +60,7 @@ def sea_level_press(**kwargs):
 
 	return meteo.pressure*np.exp((meteo.g*meteo.elevation)/(meteo.Rd*meteo.K))
 
-def sat_wv_press(**kwargs):
+def sat_vapor_press_lowe(**kwargs):
 	"""  sat_wv_press = f(C[K]) [mb]
 		valid for liquid water and -50°C<T<50°C
 		error within 1%
@@ -87,6 +90,23 @@ def sat_wv_press(**kwargs):
 	else:
 		print "Error: check input arguments\n"
 
+def sat_vapor_press_cc(**kwargs):
+	"""  sat_wv_press = f(C[K]) [mb]
+		from Clasius-Clapyron equation
+		Bhoren and Albrecht (1998)
+	"""
+	meteo=parse_args(**kwargs)	
+	check_C=hasattr(meteo,'C')
+	check_K=hasattr(meteo,'K')
+	es0=6.11 # [mb]
+	if check_C:
+		Tk=meteo.C+273.15
+		return es0*np.exp(19.84-5417/Tk)
+	elif check_K:
+		return es0*np.exp(19.84-5417/meteo.K)
+	else:
+		print "Error: check input arguments\n"
+
 def sat_mix_ratio(**kwargs):
 	"""  sat_mix_ratio = f(C,hPa {mb}) [kg/kg]
 		Saucier, 1989, p.11
@@ -96,7 +116,7 @@ def sat_mix_ratio(**kwargs):
 	check_C=hasattr(meteo,'C')
 	check_p=hasattr(meteo,'pressure')	
 	if check_C and check_p:
-		es = sat_wv_press(C=meteo.C)
+		es = sat_vapor_press_cc(C=meteo.C)
 		p=meteo.pressure 
 		return (0.622*es)/(p - es ) # [kg/kg]
 	else:
@@ -108,8 +128,8 @@ def relative_humidity(**kwargs):
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
-	check_dewp=hasattr(meteo,'Dewp')		
-	if check_C and check_dewp:
+	check_Dewp=hasattr(meteo,'Dewp')		
+	if check_C and check_relh:
 		relh = np.asarray(100-5*(meteo.C- meteo.Dewp)) #[%]
 		relh[relh>100.0] = 100.0
 		return relh	
@@ -117,17 +137,17 @@ def relative_humidity(**kwargs):
 		print "Error: check input arguments\n"
 
 def dew_point(**kwargs):
-	""" 	relative_humidity = f(C,Dewp) [%]
-		Dewp = f(C,relative_humidity) [C]
+	""" 	Dewp = f(C,relative_humidity) [C]
 		Lawrence, 2005, BAMS
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
-	check_dewp=hasattr(meteo,'Dewp')		
-	if check_C and check_dewp:
-		relh = np.asarray(100-5*(meteo.C- meteo.Dewp)) #[%]
-		relh[relh>100.0] = 100.0
-		return relh	
+	check_relh=hasattr(meteo,'relh')		
+	if check_C and check_relh:
+		relh =meteo.relh
+		relh[relh>100.0] = 100.0		
+		dewp = meteo.C - np.asarray((100. - relh)/5.) #[%]
+		return dewp
 	else:
 		print "Error: check input arguments\n"		
 
@@ -151,24 +171,69 @@ def virtual_temperature(**kwargs):
 	else:
 		print "Error: check input arguments\n"
 
-def theta(**kwargs):
-	""" Compute potential temperature
-		theta = f(C {K}, hPa {mb}) [K]
+def lcl_temperature(**kwargs):
+	""" Lifting condensation level
+		temperature
+		Bolton, 1980, MWR (Eq22)
 	"""
 	meteo=parse_args(**kwargs)	
-	c = meteo.Rd/meteo.cp 
+	check_K=hasattr(meteo,'K')	
+	check_relh=hasattr(meteo,'relh')	
+	if check_K and check_relh:
+		Tk=meteo.K 
+		relh=meteo.relh # [%]
+		a = 1/(Tk-55)
+		b = np.log(relh/100.0)/2840.
+		return (1/(a-b))+55
+
+def theta1(**kwargs):
+	""" Compute potential temperature
+		theta = f(C {K}, hPa {mb}) [K]
+		Wallace&Hobbs, 2006, p.85		
+	"""
+	meteo=parse_args(**kwargs)		
 	check_C=hasattr(meteo,'C')
 	check_K=hasattr(meteo,'K')
-	quotient=np.divide(meteo.p0,meteo.pressure)
-	if check_K:
+	check_p=hasattr(meteo,'pressure')	
+	c = meteo.Rd/meteo.cp 	
+	if check_K and check_p:
+		quotient=np.divide(meteo.p0,meteo.pressure)		
 		return meteo.K*np.power(quotient,c) # [K]
-	elif check_C:
+	elif check_C and check_p:
 		Tk=meteo.C+273.15
+		quotient=np.divide(meteo.p0,meteo.pressure)		
 		return Tk*np.power(quotient,c) # [K]
 	else:
-		print "Error: check input arguments\n"
+		print "Error in theta1: check input arguments\n"
 
-def theta_equiv(**kwargs):
+def theta2(**kwargs):
+	""" Compute potential temperature
+		theta = f(C {K}, hPa {mb}, mixing_ratio) [K]
+		Bolton, 1980, MWR	
+	"""
+	meteo=parse_args(**kwargs)	
+	check_C = hasattr(meteo,'C')
+	check_K = hasattr(meteo,'K')
+	check_p = hasattr(meteo,'pressure')	
+	check_mixingr = hasattr(meteo,'mixing_ratio')	
+	if check_K and check_p and check_mixingr:
+		Tk=meteo.K
+		p=meteo.pressure
+		MR=meteo.mixing_ratio
+		quotient=np.divide(meteo.p0, p)
+		power=0.2584*(1-0.28*MR)
+		return Tk*np.power(quotient, power) # [K]
+	elif check_C and check_p and check_mixingr:
+		Tk=meteo.C+273.15
+		p=meteo.pressure
+		MR=meteo.mixing_ratio
+		quotient=np.divide(meteo.p0, p)
+		power=0.2584*(1-0.28*MR)
+		return Tk*np.power(quotient, power) # [K]
+	else:
+		print "Error in theta2: check input arguments\n"
+
+def theta_equiv1(**kwargs):
 	""" Compute equivalent potential temperature
 		theta_equiv = f(C{K}, hPa{mb}) [K]
 		Saucier, 1989, p.14
@@ -181,16 +246,53 @@ def theta_equiv(**kwargs):
 	if check_K and check_p:
 		Tc=meteo.K-273.15
 		satmixr=sat_mix_ratio(C=Tc, hPa=meteo.pressure)
-		th=theta(K=meteo.K, hPa=meteo.pressure)
+		th=theta1(K=meteo.K, hPa=meteo.pressure)
 		exp=np.exp( np.divide( meteo.Lv*satmixr, meteo.cp*meteo.K ) )
 		return th*exp
 	elif check_C and check_p:
 		satmixr=sat_mix_ratio(C=meteo.C, hPa=meteo.pressure)
-		th=theta(C=meteo.C, hPa=meteo.pressure)
+		th=theta1(C=meteo.C, hPa=meteo.pressure)
 		Tk=meteo.C+273.15
 		exp=np.exp( np.divide( meteo.Lv*satmixr, meteo.cp*Tk ) )
-		return th*exp		
+		return th*exp
+	else:
+		print "Error in theta_equiv1: check input arguments\n"	
 
+def theta_equiv2(**kwargs):
+	""" Compute equivalent potential temperature
+		theta_equiv = f(C{K}, hPa{mb}) [K]
+		Bolton, 1980, MWR (Eq43)
+	"""
+	meteo=parse_args(**kwargs)	
+	check_C=hasattr(meteo,'C')
+	check_K=hasattr(meteo,'K')	
+	check_p=hasattr(meteo,'pressure')
+	check_relh=hasattr(meteo,'relh')
+	check_mixingr = hasattr(meteo,'mixing_ratio')
+
+	if check_K and check_p and check_mixingr and check_relh:
+		Tk=meteo.K
+		P=meteo.pressure
+		MR=meteo.mixing_ratio
+		RH=meteo.relh
+		th=theta2(K=Tk,hPa=P,mixing_ratio=MR)
+		TL=lcl_temperature(K=Tk,relh=RH)
+		a=(3.376/TL)-0.00254
+		b=1E3*MR*(1+0.81*MR)
+		return th*np.exp(a*b)
+	elif check_C and check_p and check_mixingr and check_relh:
+		Tk=meteo.C+273.15
+		P=meteo.pressure
+		MR=meteo.mixing_ratio
+		RH=meteo.relh
+		th=theta2(K=Tk,hPa=P,mixing_ratio=MR)
+		TL=lcl_temperature(K=Tk,relh=RH)
+		a=(3.376/TL)-0.00254
+		b=1E3*MR*(1+0.81*MR)
+		return th*np.exp(a*b)
+	else:
+		print "Error in theta_equiv2: check input arguments\n"	
+		
 def bv_freq_dry(**kwargs):
 	"""	Compute dry Brunt-Vaisala frequency (N^2)
 		Bohren and Albrecht (1998)		
