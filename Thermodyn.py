@@ -30,6 +30,8 @@ class meteo(object):
 				self.relh = value	# [%]
 			elif key == 'mixing_ratio':
 				self.mixing_ratio = value # [kg/kg]
+			elif key == 'specific_humidity':
+				self.q = value # [kg/kg]				
 			elif key == 'mb' or key == 'hPa':
 				self.pressure = value # [mb] or [hPa]
 			elif key == 'bar':
@@ -115,13 +117,19 @@ def sat_mix_ratio(**kwargs):
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
+	check_K=hasattr(meteo,'K')
 	check_p=hasattr(meteo,'pressure')	
 	if check_C and check_p:
 		es = sat_vapor_press_cc(C=meteo.C)
 		p=meteo.pressure 
 		return (0.622*es)/(p - es ) # [kg/kg]
+	elif check_K and check_p:
+		Tc=meteo.K-273.15
+		es = sat_vapor_press_cc(C=Tc)
+		p=meteo.pressure 
+		return (0.622*es)/(p - es ) # [kg/kg]		
 	else:
-		print "Error in sat_mix_ratio: check input arguments\n"
+		print "\nError in sat_mix_ratio: check input arguments\n"
 
 def relative_humidity(**kwargs):
 	""" 	relative_humidity = f(C,Dewp) [%]
@@ -178,7 +186,6 @@ def virtual_temperature(**kwargs):
 	else:
 		print "\nError in virtual_temperature: check input arguments\n"
 
-
 def lcl_temperature(**kwargs):
 	""" Lifting condensation level
 		temperature
@@ -196,6 +203,18 @@ def lcl_temperature(**kwargs):
 	else:
 		print "\nError in lcl_temperature: check input arguments\n"
 		
+
+def mixing_ratio(**kwargs):
+	"""  Mixing ratio from specific
+		humidity
+		Bohren and Albrecht (1998)
+	"""
+	meteo=parse_args(**kwargs)	
+	check_sphum=hasattr(meteo,'q')	
+	if check_sphum:
+		return meteo.q/(1-meteo.q)
+	else:
+		print "\nError in mixing_ratio: check input arguments\n"
 
 def theta1(**kwargs):
 	""" Compute potential temperature
@@ -273,7 +292,7 @@ def theta_equiv1(**kwargs):
 
 def theta_equiv2(**kwargs):
 	""" Compute equivalent potential temperature
-		theta_equiv = f(C{K}, hPa{mb},mixing_ratio) [K]
+		theta_equiv = f(C{K}, hPa{mb},mixing_ratio, relh) [K]
 		mixing_ratio in [kg/kg]
 		Bolton, 1980, MWR (Eq43)
 	"""
@@ -349,13 +368,13 @@ def bv_freq_dry(**kwargs):
 
 	''' get layer center '''
 	hgt = grp.apply(get_layer_center)
-	
+
 	''' if last value in row is nan then drop it'''
 	tail= bvf_raw.tail(1).values[0]
 	if np.isnan(tail):
 		d={'bvf_dry':bvf_raw[:-1].values}
 		bvf=pd.DataFrame(d,index=hgt[:-1].values)
-		bvf.index.name=['Height']
+		bvf.index.name='Height'
 	else:
 		d={'bvf_dry':bvf_raw.values}
 		bvf=pd.DataFrame(d,index=hgt.values)
@@ -462,14 +481,13 @@ def get_max_hgt(x):
 
 def get_layer_center(x):
 	''' x is a pandas group '''
-	values = np.squeeze(x.index)
-	s = values.shape
-	if s:
+	values = x.index.get_values()
+	if len(values)>1:
 		target = int(x.name)
 		out = values[find_nearest2(values,target)]
 		return out
 	else:
-		return values
+		return values[0]
 
 def make_layer(height,**kwargs):
 	''' makes a new field layer 
