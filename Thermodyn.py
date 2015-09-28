@@ -473,8 +473,6 @@ def bv_freq_moist(**kwargs):
 	F5 = dQ/dZ
 	bvf_raw = g*((F1/F2)*(F3+F4)-F5)
 
-	# print F3
-
 	''' apply get_layer_center function'''
 	hgt = grp.apply(get_layer_center)
 	
