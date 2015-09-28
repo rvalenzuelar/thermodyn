@@ -39,7 +39,7 @@ class meteo(object):
 			elif key == 'Pa':
 				self.pressure = value # [hPa]
 			elif key == 'agl_m':
-				self.height = value # m altitude above ground level			
+				self.agl_m = value # m altitude above ground level			
 			elif key == 'm':
 				self.elevation = value # m station elevation
 
@@ -328,18 +328,19 @@ def theta_equiv2(**kwargs):
 
 def bv_freq_dry(**kwargs):
 	"""	Compute dry Brunt-Vaisala frequency (N^2)
+		bv_freq_dry = f(theta, height)
 		Bohren and Albrecht (1998)		
 	"""
 	meteo=parse_args(**kwargs)	
 	check_theta=hasattr(meteo,'theta')
-	check_height=hasattr(meteo,'height')		
+	check_height=hasattr(meteo,'agl_m')		
 
 	''' creates layer field'''
-	layer = make_layer(meteo.height,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
-	
+	layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+
 	''' creates dataframe '''	
 	d = {'theta':meteo.theta,'layer':layer}
-	df=pd.DataFrame(d,index=meteo.height)
+	df=pd.DataFrame(d,index=meteo.agl_m)
 
 	''' creates group '''
 	grp=df.groupby('layer')
@@ -384,29 +385,49 @@ def bv_freq_dry(**kwargs):
 
 def bv_freq_moist(**kwargs):
 	"""	Compute moist Brunt-Vaisala frequency (N^2)
+		bv_freq_moist = f( C{K}, hPa, mixr, hgt)
+		bv_freq_moist = f( C{K}, hPa, hgt) (less accurate, uses saturated mixt)
 		Durran and Klemp (1982)		
 	"""
 	meteo=parse_args(**kwargs)	
 	check_C=hasattr(meteo,'C')
 	check_K=hasattr(meteo,'K')
-	check_hgt=hasattr(meteo,'height')		
+	check_hgt=hasattr(meteo,'agl_m')		
 	check_press=hasattr(meteo,'pressure')		
 	check_mixingr=hasattr(meteo,'mixing_ratio')
 
 	''' creates layer field '''
-	layer = make_layer(meteo.height,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+	layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
 
-	''' add fields  '''
-	sat_mixr = sat_mix_ratio(C=meteo.K-273.15,hPa=meteo.pressure)
-	th = theta2(K=meteo.K,hPa=meteo.pressure,mixing_ratio=meteo.mixing_ratio)
+	# ''' add fields  '''
+	# if check_mixingr:
+	# 	th = theta2(K=meteo.K,hPa=meteo.pressure,mixing_ratio=meteo.mixing_ratio)
+	# else:
+	# 	th = theta1(K=meteo.K,hPa=meteo.pressure)
 
 	''' creates dataframe '''
-	if check_C:
+	if check_C and check_mixingr:
 		Tk=meteo.C+273.15
+		th = theta2(K=Tk, hPa=meteo.pressure,mixing_ratio=meteo.mixing_ratio)		
+		sat_mixr = sat_mix_ratio(C=meteo.C,hPa=meteo.pressure)		
+		d = {'temp':Tk,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
+	elif check_K and check_mixingr:
+		th = theta2(K=meteo.K, hPa=meteo.pressure,mixing_ratio=meteo.mixing_ratio)		
+		sat_mixr = sat_mix_ratio(C=meteo.K-273.15,hPa=meteo.pressure)				
+		d = {'temp':meteo.K,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
+	elif check_C:
+		Tk=meteo.C+273.15
+		th = theta1(K=Tk, hPa=meteo.pressure)
+		sat_mixr = sat_mix_ratio(C=meteo.C,hPa=meteo.pressure)	
 		d = {'temp':Tk,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
 	elif check_K:
-		d = {'temp':meteo.K,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
-	df=pd.DataFrame(d,index=meteo.height)
+		th = theta1(K=meteo.K, hPa=meteo.pressure)
+		sat_mixr = sat_mix_ratio(C=meteo.C,hPa=meteo.pressure)	
+		d = {'temp':Tk,'press':meteo.pressure,'sat_mixr':sat_mixr,'layer':layer,'theta':th}
+	else:
+		print "\nError in bv_freq_moist: check input arguments\n"	
+
+	df=pd.DataFrame(d,index=meteo.agl_m)
 
 	''' creates group '''
 	grp=df.groupby('layer')
@@ -437,13 +458,14 @@ def bv_freq_moist(**kwargs):
 	dQs = sat_mixr_top - sat_mixr_bot
 	dQ = dQs
 
-	''' Brunt-Vaisala frequency '''
+	''' constants '''
 	eps=meteo.Rd/meteo.Rm
 	Lv=meteo.Lv
 	cp=meteo.cp
 	Rd=meteo.Rd
 	g=meteo.g
 	
+	''' Moist Brunt-Vaisala frequency '''
 	F1 = 1+((Lv*satmixr_mean)/(Rd*temp_mean))
 	F2 = 1+(eps*np.power(Lv,2)*satmixr_mean)/(cp*Rd*np.power(temp_mean,2))
 	F3 = dlnTheta/dZ
@@ -451,7 +473,9 @@ def bv_freq_moist(**kwargs):
 	F5 = dQ/dZ
 	bvf_raw = g*((F1/F2)*(F3+F4)-F5)
 
-	''' get layer center '''
+	# print F3
+
+	''' apply get_layer_center function'''
 	hgt = grp.apply(get_layer_center)
 	
 	''' if last value in row is nan then drop it'''
