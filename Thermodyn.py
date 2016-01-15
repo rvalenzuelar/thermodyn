@@ -336,7 +336,8 @@ def bv_freq_dry(**kwargs):
 	check_height=hasattr(meteo,'agl_m')		
 
 	''' creates layer field'''
-	layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+	# layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+	layer = make_layer2(meteo.agl_m,depth_m=kwargs['depth_m'])
 
 	''' creates dataframe '''	
 	d = {'theta':meteo.theta,'layer':layer}
@@ -397,7 +398,8 @@ def bv_freq_moist(**kwargs):
 	check_mixingr=hasattr(meteo,'mixing_ratio')
 
 	''' creates layer field '''
-	layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+	# layer = make_layer(meteo.agl_m,depth_m=kwargs['depth_m'],centered=kwargs['centered'])
+	layer = make_layer2(meteo.agl_m,depth_m=kwargs['depth_m'])
 
 	# ''' add fields  '''
 	# if check_mixingr:
@@ -535,6 +537,38 @@ def make_layer(height,**kwargs):
 		return pd.Series(list(map(f,layers,layers_half)),index=height)
 	else:
 		return layers
+
+def make_layer2(height,depth_m):
+	''' 	makes a new layer Series
+		so that values can be grouped 
+		later for layer-based calculations
+		(i.e. Brunt-Vaisala freq)
+
+		Assumes center of layer
+	'''
+	
+	diff = np.diff(height)
+	cumsum=np.cumsum(diff)
+	try:
+		jump=np.where(cumsum == depth_m)[0][0]
+	except IndexError:
+		' if depth_m does not fit height gate resolution '
+		jump=np.where(cumsum == depth_m+1)[0][0]
+	centers = height[(jump+1)/2::jump+2]
+	reps=jump+2
+	layers=np.repeat(centers, reps)
+	' depending on centers index...'
+	if len(layers)<len(height):
+		' some (end) layers will be stretched '
+		lendiff=len(height)-len(layers)
+		complete=np.repeat(layers[-1], lendiff)
+		layers= np.append(layers,complete)
+	elif len(layers)>len(height):
+		' some (end) layers will be shrinked'
+		layers= layers[:len(height)]
+	else:
+		pass
+	return pd.Series(layers,index=height)
 
 def find_nearest2(array,target):
 
