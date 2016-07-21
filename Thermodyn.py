@@ -189,6 +189,7 @@ def virtual_temperature(**kwargs):
     check_K = hasattr(meteo, 'K')
     check_theta = hasattr(meteo, 'theta')
     check_mixingr = hasattr(meteo, 'mixing_ratio')
+    
     if check_C and check_mixingr:
         return meteo.C*(1+0.61*meteo.mixing_ratio)
     elif check_K and check_mixingr:
