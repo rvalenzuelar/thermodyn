@@ -406,6 +406,8 @@ def bv_freq_dry(**kwargs):
 
 def bv_freq_moist(**kwargs):
     """ Compute moist Brunt-Vaisala frequency (N^2)
+        at center of layer
+        
         bv_freq_moist = f( C{K}, hPa, mixr, hgt)
         bv_freq_moist = f( C{K}, hPa, hgt) (less accurate, uses saturated mixt)
         Durran and Klemp (1982)
@@ -413,8 +415,8 @@ def bv_freq_moist(**kwargs):
     meteo = parse_args(**kwargs)
     check_C = hasattr(meteo, 'C')
     check_K = hasattr(meteo, 'K')
-    check_hgt = hasattr(meteo, 'agl_m')
-    check_press = hasattr(meteo, 'pressure')
+#    check_hgt = hasattr(meteo, 'agl_m')
+#    check_press = hasattr(meteo, 'pressure')
     check_mixingr = hasattr(meteo, 'mixing_ratio')
 
     ''' creates layer field '''
@@ -464,7 +466,7 @@ def bv_freq_moist(**kwargs):
     ''' mean value of layers '''
     grp_mean = grp.mean()
     temp_mean = grp_mean.temp
-    press_mean = grp_mean.press
+#    press_mean = grp_mean.press
     satmixr_mean = grp_mean.sat_mixr
 
     ''' bottom values of layer '''
@@ -574,7 +576,7 @@ def make_layer(height, **kwargs):
 
 
 def make_layer2(height, depth_m):
-    '''     makes a new layer Series
+    ''' makes a new layer Series
         so that values can be grouped
         later for layer-based calculations
         (i.e. Brunt-Vaisala freq)
